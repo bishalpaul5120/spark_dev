@@ -47,8 +47,5 @@ agedf.show(truncate=False)
 agedf.write.format("parquet").mode("overwrite").save("s3://spark-jobs1/dest/snowOutput/")
 
 
-custpercity = sdf.groupBy("city").agg(count("*").alias("Total_Customer")).orderBy("city")
-custpercity.write.format("parquet").mode("append").save("s3://spark-jobs1/dest/snowOutput/")
-
 
 
