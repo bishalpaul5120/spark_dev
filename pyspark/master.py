@@ -25,7 +25,7 @@ spark.sparkContext.setLogLevel("ERROR")
 
 s3data = spark.read.parquet("s3://spark-jobs1/dest/s3Output/")
 snowdata = spark.read.parquet(
-    "s3://spark-jobs1/dest/snowOutput/part-00000-c88834f0-35bc-4760-bf3c-364b6c46a16d-c000.snappy.parquet"
+    "s3://spark-jobs1/dest/snowOutput/"
 )
 
 s3data.createOrReplaceTempView("sdata")
