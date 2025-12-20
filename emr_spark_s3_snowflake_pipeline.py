@@ -1,5 +1,6 @@
 from airflow import DAG
-from airflow.utils.dates import days_ago
+from datetime import datetime, timedelta
+
 from airflow.providers.amazon.aws.operators.emr import (
     EmrCreateJobFlowOperator,
     EmrAddStepsOperator,
@@ -7,49 +8,48 @@ from airflow.providers.amazon.aws.operators.emr import (
 )
 from airflow.providers.amazon.aws.sensors.emr import EmrStepSensor
 from airflow.providers.amazon.aws.hooks.sns import SnsHook
-from airflow.utils.state import State
-from datetime import timedelta
 
-# -------------------
+# -------------------------------------------------------------------
 # GLOBAL CONFIG
-# -------------------
+# -------------------------------------------------------------------
 AWS_CONN_ID = "aws_default"
 REGION = "ap-south-1"
 
 SNS_TOPIC_ARN = "arn:aws:sns:ap-south-1:123456789012:airflow-emr-alerts"
 
 SPARK_DEPLOYMENT_BUCKET = "s3://master-job/spark_deployment"
-BOOTSTRAP_BUCKET = "s3://snowflake-creds/snowbootstrap.sh"
+BOOTSTRAP_SCRIPT = "s3://snowflake-creds/snowbootstrap.sh"
 
-# -------------------
-# FAILURE CALLBACK
-# -------------------
+# -------------------------------------------------------------------
+# FAILURE NOTIFICATION CALLBACK
+# -------------------------------------------------------------------
 def notify_failure(context):
-    dag_id = context['dag'].dag_id
-    task_id = context['task_instance'].task_id
-    exec_date = context['execution_date']
-    log_url = context['task_instance'].log_url
+    dag_id = context["dag"].dag_id
+    task_id = context["task_instance"].task_id
+    execution_date = context["execution_date"]
+    log_url = context["task_instance"].log_url
 
     message = f"""
-    ❌ Airflow Task Failed
+❌ Airflow Task Failed
 
-    DAG: {dag_id}
-    Task: {task_id}
-    Execution Time: {exec_date}
+DAG: {dag_id}
+Task: {task_id}
+Execution Time: {execution_date}
 
-    Logs: {log_url}
-    """
+Logs:
+{log_url}
+"""
 
     sns_hook = SnsHook(aws_conn_id=AWS_CONN_ID)
     sns_hook.publish_to_topic(
         topic_arn=SNS_TOPIC_ARN,
         message=message,
-        subject="Airflow EMR Pipeline Failure"
+        subject="Airflow EMR Pipeline Failure",
     )
 
-# -------------------
+# -------------------------------------------------------------------
 # DEFAULT ARGS
-# -------------------
+# -------------------------------------------------------------------
 default_args = {
     "owner": "airflow",
     "depends_on_past": False,
@@ -58,11 +58,11 @@ default_args = {
     "on_failure_callback": notify_failure,
 }
 
-# -------------------
+# -------------------------------------------------------------------
 # EMR CLUSTER CONFIG
-# -------------------
+# -------------------------------------------------------------------
 JOB_FLOW_OVERRIDES = {
-    "Name": "spark-airflow-cluster",
+    "Name": "airflow-spark-emr-cluster",
     "ReleaseLabel": "emr-6.10.0",
     "Applications": [{"Name": "Spark"}],
     "Instances": {
@@ -89,7 +89,7 @@ JOB_FLOW_OVERRIDES = {
         {
             "Name": "Snowflake Spark Connector",
             "ScriptBootstrapAction": {
-                "Path": BOOTSTRAP_BUCKET
+                "Path": BOOTSTRAP_SCRIPT
             },
         }
     ],
@@ -99,9 +99,9 @@ JOB_FLOW_OVERRIDES = {
     "LogUri": "s3://master-job/emr-logs/",
 }
 
-# -------------------
+# -------------------------------------------------------------------
 # SPARK STEPS
-# -------------------
+# -------------------------------------------------------------------
 SPARK_STEPS = [
     {
         "Name": "S3 Job",
@@ -110,7 +110,8 @@ SPARK_STEPS = [
             "Jar": "command-runner.jar",
             "Args": [
                 "spark-submit",
-                "--deploy-mode", "cluster",
+                "--deploy-mode",
+                "cluster",
                 f"{SPARK_DEPLOYMENT_BUCKET}/s3job.py",
             ],
         },
@@ -122,7 +123,8 @@ SPARK_STEPS = [
             "Jar": "command-runner.jar",
             "Args": [
                 "spark-submit",
-                "--deploy-mode", "cluster",
+                "--deploy-mode",
+                "cluster",
                 f"{SPARK_DEPLOYMENT_BUCKET}/snowjob.py",
             ],
         },
@@ -134,20 +136,21 @@ SPARK_STEPS = [
             "Jar": "command-runner.jar",
             "Args": [
                 "spark-submit",
-                "--deploy-mode", "cluster",
+                "--deploy-mode",
+                "cluster",
                 f"{SPARK_DEPLOYMENT_BUCKET}/master.py",
             ],
         },
     },
 ]
 
-# -------------------
-# DAG
-# -------------------
+# -------------------------------------------------------------------
+# DAG DEFINITION
+# -------------------------------------------------------------------
 with DAG(
     dag_id="emr_spark_s3_snowflake_pipeline",
     default_args=default_args,
-    start_date=days_ago(1),
+    start_date=datetime(2024, 1, 1),
     schedule_interval=None,
     catchup=False,
     tags=["emr", "spark", "snowflake"],
@@ -162,24 +165,24 @@ with DAG(
 
     add_spark_steps = EmrAddStepsOperator(
         task_id="add_spark_steps",
-        job_flow_id="{{ task_instance.xcom_pull('create_emr_cluster', key='return_value') }}",
+        job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster') }}",
         steps=SPARK_STEPS,
         aws_conn_id=AWS_CONN_ID,
     )
 
     watch_master_step = EmrStepSensor(
         task_id="watch_master_step",
-        job_flow_id="{{ task_instance.xcom_pull('create_emr_cluster', key='return_value') }}",
-        step_id="{{ task_instance.xcom_pull('add_spark_steps', key='return_value')[-1] }}",
+        job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster') }}",
+        step_id="{{ task_instance.xcom_pull(task_ids='add_spark_steps')[-1] }}",
         aws_conn_id=AWS_CONN_ID,
         poke_interval=60,
     )
 
     terminate_emr_cluster = EmrTerminateJobFlowOperator(
         task_id="terminate_emr_cluster",
-        job_flow_id="{{ task_instance.xcom_pull('create_emr_cluster', key='return_value') }}",
+        job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster') }}",
         aws_conn_id=AWS_CONN_ID,
-        trigger_rule="all_done",  # 🔥 ensures termination even on failure
+        trigger_rule="all_done",
     )
 
     create_emr_cluster >> add_spark_steps >> watch_master_step >> terminate_emr_cluster
