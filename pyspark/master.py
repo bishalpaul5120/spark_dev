@@ -44,7 +44,7 @@ result = spark.sql("""
 """)
 
 result.show(truncate=False)
-result.write.format("parquet").mode("overwrite").save("s3://spark-jobs1/dest/masteroutput")
+result.write.format("parquet").mode("overwrite").save("s3://clean-curated-data/masteroutput/")
 
 
 

@@ -44,7 +44,7 @@ sdf.show()
 
 agedf = sdf.filter("AGE > 30")
 agedf.show(truncate=False)
-agedf.write.format("parquet").mode("overwrite").save("s3://spark-jobs1/dest/snowOutput/")
+agedf.write.format("parquet").mode("overwrite").save("s3://clean-curated-data/snowOutput/")
 
 
 

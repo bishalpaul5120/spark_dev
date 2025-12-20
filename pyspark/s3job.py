@@ -48,8 +48,8 @@ datedf = finaldf.withColumn("hire_date", to_date("hire_date"))
 yeardf = datedf.withColumn("Year", year("hire_date"))
 countemp = yeardf.groupBy("Year").agg(count("*").alias("Total_employee")).orderBy("Year")
 
-salaryfil.write.format("parquet").mode("append").save("s3://spark-jobs1/dest/s3Output/")
-countemp.write.format("parquet").mode("append").save("s3://spark-jobs1/dest/s3Output/")
+salaryfil.write.format("parquet").mode("append").save("s3://clean-curated-data/s3Output/")
+countemp.write.format("parquet").mode("append").save("s3://clean-curated-data/s3Output/")
 
 
 
