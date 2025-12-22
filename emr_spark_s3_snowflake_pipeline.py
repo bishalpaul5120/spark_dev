@@ -26,7 +26,7 @@ BOOTSTRAP_SCRIPT = "s3://snowflake-creds/snowbootstrap.sh"
 def notify_failure(context):
     dag_id = context["dag"].dag_id
     task_id = context["task_instance"].task_id
-    execution_date = context["execution_date"]
+    execution_date = context["logical_date"]
     log_url = context["task_instance"].log_url
 
     message = f"""
@@ -151,7 +151,7 @@ with DAG(
     dag_id="emr_spark_s3_snowflake_pipeline",
     default_args=default_args,
     start_date=datetime(2024, 1, 1),
-    schedule=None,
+    schedule_interval=None,
     catchup=False,
     tags=["emr", "spark", "snowflake"],
 ) as dag:
