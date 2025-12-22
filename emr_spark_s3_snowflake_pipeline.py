@@ -18,7 +18,11 @@ REGION = "ap-south-1"
 SNS_TOPIC_ARN = "arn:aws:sns:ap-south-1:123456789012:airflow-emr-alerts"
 
 SPARK_DEPLOYMENT_BUCKET = "s3://master-job/spark_deployment"
-BOOTSTRAP_SCRIPT = "s3://snowflake-creds/snowbootstrap.sh"
+
+SNOWFLAKE_JARS = (
+    "s3://snowflake-creds/jars/spark-snowflake_2.12-3.1.1.jar,"
+    "s3://snowflake-creds/jars/snowflake-jdbc-3.18.1.jar"
+)
 
 # -------------------------------------------------------------------
 # FAILURE NOTIFICATION CALLBACK
@@ -26,7 +30,7 @@ BOOTSTRAP_SCRIPT = "s3://snowflake-creds/snowbootstrap.sh"
 def notify_failure(context):
     dag_id = context["dag"].dag_id
     task_id = context["task_instance"].task_id
-    execution_date = context["logical_date"]
+    logical_date = context["logical_date"]
     log_url = context["task_instance"].log_url
 
     message = f"""
@@ -34,7 +38,7 @@ def notify_failure(context):
 
 DAG: {dag_id}
 Task: {task_id}
-Execution Time: {execution_date}
+Execution Time: {logical_date}
 
 Logs:
 {log_url}
@@ -59,7 +63,7 @@ default_args = {
 }
 
 # -------------------------------------------------------------------
-# EMR CLUSTER CONFIG
+# EMR CLUSTER CONFIG (SAFE + STABLE)
 # -------------------------------------------------------------------
 JOB_FLOW_OVERRIDES = {
     "Name": "airflow-spark-emr-cluster",
@@ -71,28 +75,13 @@ JOB_FLOW_OVERRIDES = {
                 "Name": "Master node",
                 "Market": "ON_DEMAND",
                 "InstanceRole": "MASTER",
-                "InstanceType": "m5.xlarge",
+                "InstanceType": "r5.xlarge",
                 "InstanceCount": 1,
-            },
-            {
-                "Name": "Core nodes",
-                "Market": "ON_DEMAND",
-                "InstanceRole": "CORE",
-                "InstanceType": "m5.xlarge",
-                "InstanceCount": 2,
-            },
+            }
         ],
         "KeepJobFlowAliveWhenNoSteps": True,
         "TerminationProtected": False,
     },
-    "BootstrapActions": [
-        {
-            "Name": "Snowflake Spark Connector",
-            "ScriptBootstrapAction": {
-                "Path": BOOTSTRAP_SCRIPT
-            },
-        }
-    ],
     "JobFlowRole": "EMR_EC2_DefaultRole",
     "ServiceRole": "EMR_DefaultRole",
     "VisibleToAllUsers": True,
@@ -105,7 +94,7 @@ JOB_FLOW_OVERRIDES = {
 SPARK_STEPS = [
     {
         "Name": "S3 Job",
-        "ActionOnFailure": "TERMINATE_CLUSTER",
+        "ActionOnFailure": "CONTINUE",
         "HadoopJarStep": {
             "Jar": "command-runner.jar",
             "Args": [
@@ -118,20 +107,22 @@ SPARK_STEPS = [
     },
     {
         "Name": "Snowflake Job",
-        "ActionOnFailure": "TERMINATE_CLUSTER",
+        "ActionOnFailure": "CONTINUE",
         "HadoopJarStep": {
             "Jar": "command-runner.jar",
             "Args": [
                 "spark-submit",
                 "--deploy-mode",
                 "cluster",
+                "--jars",
+                SNOWFLAKE_JARS,
                 f"{SPARK_DEPLOYMENT_BUCKET}/snowjob.py",
             ],
         },
     },
     {
         "Name": "Master Job",
-        "ActionOnFailure": "TERMINATE_CLUSTER",
+        "ActionOnFailure": "CONTINUE",
         "HadoopJarStep": {
             "Jar": "command-runner.jar",
             "Args": [
@@ -145,13 +136,13 @@ SPARK_STEPS = [
 ]
 
 # -------------------------------------------------------------------
-# DAG DEFINITION
+# DAG DEFINITION (AIRFLOW 3.x CORRECT)
 # -------------------------------------------------------------------
 with DAG(
     dag_id="emr_spark_s3_snowflake_pipeline",
     default_args=default_args,
     start_date=datetime(2024, 1, 1),
-    schedule=None,
+    schedule=None,          # ✅ Airflow 3.x correct
     catchup=False,
     tags=["emr", "spark", "snowflake"],
 ) as dag:
