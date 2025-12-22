@@ -151,7 +151,7 @@ with DAG(
     dag_id="emr_spark_s3_snowflake_pipeline",
     default_args=default_args,
     start_date=datetime(2024, 1, 1),
-    schedule_interval=None,
+    schedule=None,
     catchup=False,
     tags=["emr", "spark", "snowflake"],
 ) as dag:
