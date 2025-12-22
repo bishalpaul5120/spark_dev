@@ -70,6 +70,11 @@ JOB_FLOW_OVERRIDES = {
     "ReleaseLabel": "emr-6.10.0",
     "Applications": [{"Name": "Spark"}],
     "Instances": {
+        "Ec2SubnetId": "subnet-015e5da5f1be3bc86",
+
+        "EmrManagedMasterSecurityGroup": "sg-0366adf7c48491532",
+        "ServiceAccessSecurityGroup": "sg-0366adf7c48491532",
+
         "InstanceGroups": [
             {
                 "Name": "Master node",
@@ -82,6 +87,7 @@ JOB_FLOW_OVERRIDES = {
         "KeepJobFlowAliveWhenNoSteps": True,
         "TerminationProtected": False,
     },
+
     "JobFlowRole": "EMR_EC2_DefaultRole",
     "ServiceRole": "EMR_DefaultRole",
     "VisibleToAllUsers": True,
