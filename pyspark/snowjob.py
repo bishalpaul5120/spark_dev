@@ -1,51 +1,32 @@
-import os
-import sys
-import subprocess
+import json
+import boto3
 from pyspark.sql import SparkSession
 
-spark = (
-    SparkSession.builder
-    .appName("snowjob")
-    .getOrCreate()
-)
-
+spark = SparkSession.builder.appName("snowjob").getOrCreate()
 spark.sparkContext.setLogLevel("ERROR")
 
-# ============================================================
-# Get Snowflake password securely from AWS Secrets Manager
-# ============================================================
+# Read secret
+client = boto3.client("secretsmanager", region_name="ap-south-1")
+secret = json.loads(client.get_secret_value(SecretId="snowpass")["SecretString"])
+snowpassword = secret["password"]
 
-snowpassword = subprocess.getoutput(
-    "aws secretsmanager get-secret-value "
-    "--secret-id snowpass "
-    "--query SecretString "
-    "--output text"
-).strip()
-
-if not snowpassword:
-    raise Exception("Snowflake password could not be loaded from Secrets Manager")
-
-# ============================================================
-# Read from Snowflake
-# ============================================================
+sfOptions = {
+    "sfURL": "https://ibpoccb-kp90206.snowflakecomputing.com",
+    "sfUser": "bishalpaul5120",
+    "sfPassword": snowpassword,
+    "sfDatabase": "CUSTOMER",
+    "sfSchema": "PUBLIC",
+    "sfWarehouse": "COMPUTE_WH",
+    "sfRole": "ACCOUNTADMIN"
+}
 
 sdf = (
-    spark.read.format("snowflake")
-    .option("sfUrl", "https://IBPOCCB-KP90206.snowflakecomputing.com")
-    .option("sfAccount", "KP90206")
-    .option("sfUser", "bishalpaul5120")
-    .option("sfPassword", snowpassword)
-    .option("sfDatabase", "CUSTOMER")
-    .option("sfSchema", "PUBLIC")
-    .option("sfRole", "ACCOUNTADMIN")
-    .option("sfWarehouse", "COMPUTE_WH")
-    .option("dbTable", "CUSTOMERDATA")
+    spark.read
+    .format("snowflake")
+    .options(**sfOptions)
+    .option("dbtable", "CUSTOMERDATA")
     .load()
 )
 
 agedf = sdf.filter("AGE > 30")
-
-agedf.write \
-    .format("parquet") \
-    .mode("overwrite") \
-    .save("s3://clean-curated-data/snowOutput/")
+agedf.write.mode("overwrite").parquet("s3://clean-curated-data/snowOutput/")
