@@ -23,9 +23,9 @@ spark.sparkContext.setLogLevel("ERROR")
 
 # =====================================================================
 
-s3data = spark.read.parquet("s3://spark-jobs1/dest/s3Output/")
+s3data = spark.read.parquet("s3://clean-curated-data/s3Output/")
 snowdata = spark.read.parquet(
-    "s3://spark-jobs1/dest/snowOutput/"
+    "s3://clean-curated-data/snowOutput/"
 )
 
 s3data.createOrReplaceTempView("sdata")
