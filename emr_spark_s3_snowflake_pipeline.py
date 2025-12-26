@@ -1,12 +1,11 @@
 from airflow import DAG
-from airflow.utils.dates import days_ago
 from airflow.providers.amazon.aws.operators.emr import (
     EmrCreateJobFlowOperator,
     EmrAddStepsOperator,
     EmrTerminateJobFlowOperator,
 )
 from airflow.providers.amazon.aws.sensors.emr import EmrStepSensor
-from airflow.models import Variable
+import pendulum
 
 # -------------------------------------------------------------------
 # DEFAULT ARGS
@@ -22,11 +21,11 @@ default_args = {
 # -------------------------------------------------------------------
 with DAG(
     dag_id="emr_spark_s3_snowflake_pipeline",
-    default_args=default_args,
     description="Orchestrate Spark jobs on EMR using Airflow",
+    start_date=pendulum.datetime(2024, 1, 1, tz="UTC"),
     schedule=None,
-    start_date=days_ago(1),
     catchup=False,
+    default_args=default_args,
     tags=["emr", "spark", "snowflake"],
 ) as dag:
 
@@ -75,7 +74,7 @@ with DAG(
     SPARK_STEPS = [
         {
             "Name": "s3-job",
-            "ActionOnFailure": "CONTINUE",
+            "ActionOnFailure": "TERMINATE_CLUSTER",
             "HadoopJarStep": {
                 "Jar": "command-runner.jar",
                 "Args": [
@@ -87,7 +86,7 @@ with DAG(
         },
         {
             "Name": "snowflake-job",
-            "ActionOnFailure": "CONTINUE",
+            "ActionOnFailure": "TERMINATE_CLUSTER",
             "HadoopJarStep": {
                 "Jar": "command-runner.jar",
                 "Args": [
@@ -102,7 +101,7 @@ with DAG(
         },
         {
             "Name": "master-job",
-            "ActionOnFailure": "CONTINUE",
+            "ActionOnFailure": "TERMINATE_CLUSTER",
             "HadoopJarStep": {
                 "Jar": "command-runner.jar",
                 "Args": [
@@ -116,21 +115,21 @@ with DAG(
 
     add_spark_steps = EmrAddStepsOperator(
         task_id="add_spark_steps",
-        job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
+        job_flow_id="{{ ti.xcom_pull(task_ids='create_emr_cluster') }}",
         steps=SPARK_STEPS,
         aws_conn_id="aws_default",
     )
 
-    watch_steps = EmrStepSensor(
-        task_id="watch_spark_steps",
-        job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
-        step_id="{{ task_instance.xcom_pull(task_ids='add_spark_steps', key='return_value')[2] }}",
+    watch_last_step = EmrStepSensor(
+        task_id="watch_last_spark_step",
+        job_flow_id="{{ ti.xcom_pull(task_ids='create_emr_cluster') }}",
+        step_id="{{ ti.xcom_pull(task_ids='add_spark_steps')[-1] }}",
         aws_conn_id="aws_default",
     )
 
     terminate_emr = EmrTerminateJobFlowOperator(
         task_id="terminate_emr_cluster",
-        job_flow_id="{{ task_instance.xcom_pull(task_ids='create_emr_cluster', key='return_value') }}",
+        job_flow_id="{{ ti.xcom_pull(task_ids='create_emr_cluster') }}",
         aws_conn_id="aws_default",
         trigger_rule="all_done",
     )
@@ -138,4 +137,4 @@ with DAG(
     # -------------------------------------------------------------------
     # DAG ORDER
     # -------------------------------------------------------------------
-    create_emr_cluster >> add_spark_steps >> watch_steps >> terminate_emr
+    create_emr_cluster >> add_spark_steps >> watch_last_step >> terminate_emr
