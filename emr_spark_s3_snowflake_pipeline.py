@@ -13,7 +13,7 @@ import pendulum
 default_args = {
     "owner": "airflow",
     "depends_on_past": False,
-    "retries": 2,
+    "retries": 1,
 }
 
 # -------------------------------------------------------------------
@@ -21,7 +21,7 @@ default_args = {
 # -------------------------------------------------------------------
 with DAG(
     dag_id="emr_spark_s3_snowflake_pipeline",
-    description="Orchestrate Spark jobs on EMR using Airflow",
+    description="Create EMR, run Spark jobs, write to S3, terminate cluster",
     start_date=pendulum.datetime(2024, 1, 1, tz="UTC"),
     schedule=None,
     catchup=False,
@@ -38,6 +38,7 @@ with DAG(
         "Applications": [{"Name": "Spark"}],
         "LogUri": "s3://aws-logs-093711202752-ap-south-1/emr/",
         "Instances": {
+            "Ec2SubnetId": "subnet-0988bd323f61cb404",  
             "InstanceGroups": [
                 {
                     "Name": "Master",
@@ -54,7 +55,7 @@ with DAG(
                     "InstanceCount": 1,
                 },
             ],
-            "KeepJobFlowAliveWhenNoSteps": True,
+            "KeepJobFlowAliveWhenNoSteps": False,
             "TerminationProtected": False,
         },
         "JobFlowRole": "EMR_EC2_DefaultRole",
@@ -74,7 +75,7 @@ with DAG(
     SPARK_STEPS = [
         {
             "Name": "s3-job",
-            "ActionOnFailure": "TERMINATE_CLUSTER",
+            "ActionOnFailure": "CONTINUE",
             "HadoopJarStep": {
                 "Jar": "command-runner.jar",
                 "Args": [
@@ -86,7 +87,7 @@ with DAG(
         },
         {
             "Name": "snowflake-job",
-            "ActionOnFailure": "TERMINATE_CLUSTER",
+            "ActionOnFailure": "CONTINUE",
             "HadoopJarStep": {
                 "Jar": "command-runner.jar",
                 "Args": [
@@ -101,7 +102,7 @@ with DAG(
         },
         {
             "Name": "master-job",
-            "ActionOnFailure": "TERMINATE_CLUSTER",
+            "ActionOnFailure": "CONTINUE",
             "HadoopJarStep": {
                 "Jar": "command-runner.jar",
                 "Args": [
