@@ -7,9 +7,6 @@ from pyspark.sql.functions import *
 from pyspark.sql import SparkSession
 
 os.environ['PYSPARK_PYTHON'] = sys.executable
-os.environ['HADOOP_HOME'] = r"D:\hadoop"
-os.environ['PATH'] = os.environ['PATH'] + r";D:\hadoop\bin"
-os.environ['JAVA_HOME'] = r"C:\Users\HP\.jdks\corretto-1.8.0_462"
 
 from pyspark.sql import SparkSession
 

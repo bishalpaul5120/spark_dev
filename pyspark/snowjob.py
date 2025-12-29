@@ -5,7 +5,16 @@ from pyspark.sql import SparkSession
 # ============================================================
 # Spark session
 # ============================================================
-spark = SparkSession.builder.appName("snowjob").getOrCreate()
+spark = (
+    SparkSession.builder
+    .config("spark.jars.packages",
+        "net.snowflake:spark-snowflake_2.12:3.1.1,"
+        "net.snowflake:snowflake-jdbc:3.18.1"
+    )
+    .appName("snowjob")
+    .getOrCreate()
+)
+
 spark.sparkContext.setLogLevel("ERROR")
 
 # ============================================================
@@ -13,10 +22,14 @@ spark.sparkContext.setLogLevel("ERROR")
 # ============================================================
 secret_raw = subprocess.getoutput(
     "aws secretsmanager get-secret-value "
+    "--region ap-south-1 "
     "--secret-id snowpass "
     "--query SecretString "
     "--output text"
 )
+
+if "AccessDenied" in secret_raw or not secret_raw.strip():
+    raise Exception(f"Failed to read secret: {secret_raw}")
 
 secret = json.loads(secret_raw)
 snowpassword = secret["password"]
